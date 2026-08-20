@@ -1,0 +1,34 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "AIMultiChat",
+  "version": "1.0.0",
+  "identifier": "dk.moeberg.aimultichat.winapp",
+  "build": {
+    "devUrl": "http://localhost:8000",
+    "frontendDist": "frontend"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "AI MultiChat Desktop",
+        "width": 1280,
+        "height": 840,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}

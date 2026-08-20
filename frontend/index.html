@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>AI MultiChat Desktop</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #3a5baa 0%, #2b4a8c 100%);
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .container { text-align: center; padding: 40px; }
+    .logo {
+      width: 96px; height: 96px; margin: 0 auto 20px;
+      background: #fff; border-radius: 26px;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+    }
+    .logo .bubble {
+      width: 56px; height: 56px; position: relative;
+    }
+    .logo .dot {
+      width: 12px; height: 12px; border-radius: 50%;
+      background: #3a5baa; position: absolute; top: 8px;
+    }
+    .logo .dot.d1 { left: 4px; }
+    .logo .dot.d2 { left: 22px; }
+    .logo .dot.d3 { left: 40px; }
+    h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+    p.status { margin-top: 14px; font-size: 15px; opacity: 0.85; }
+    .spinner {
+      width: 34px; height: 34px; margin: 26px auto 0;
+      border: 3px solid rgba(255,255,255,0.25);
+      border-top-color: #fff; border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    a.go {
+      display: inline-block; margin-top: 26px; padding: 12px 28px;
+      background: #fff; color: #3a5baa; border-radius: 12px;
+      text-decoration: none; font-weight: 600; font-size: 15px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="logo">
+      <div class="bubble">
+        <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+      </div>
+    </div>
+    <h1>AI MultiChat</h1>
+    <p class="sub">Windows Desktop Client</p>
+    <div class="spinner"></div>
+    <a class="go" href="#" id="open-app">Åbn multi-chat</a>
+  </div>
+  <script>
+    // Configurable multichat URL for the desktop client.
+    // Set the URL in winapp config or replace below with your hosted instance.
+    var MULTICHAT_URL = "{{{MULTICHAT_URL}}}";
+    if (!MULTICHAT_URL || MULTICHAT_URL === "${{{MULTICHAT_URL}}}" || MULTICHAT_URL.indexOf("{{") >= 0) {
+      MULTICHAT_URL = "http://localhost:8000";
+    }
+    document.getElementById("open-app").addEventListener("click", function (e) {
+      e.preventDefault();
+      window.location.href = MULTICHAT_URL;
+    });
+  </script>
+</body>
+</html>
