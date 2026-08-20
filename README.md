@@ -42,3 +42,11 @@ git push origin v1.0.0
 ```
 
 Når workflow-jobbet er fuldført (under **Actions**-fanen), kan de færdige `.msi`- og `.exe`-filer hentes direkte under **Releases** på GitHub.
+
+---
+
+## 🧩 Desktop Companion-funktioner (Lag 1)
+
+- **System tray**: App'en indeholder et tray-ikon mer menu (**Åbn / Skjul / Afslut**). Venstre-klik på ikonet toggler chat-vinduet.
+- **Global genvejstast:** `Ctrl+Shift+E` åbner/skjuler chat-vinduet fra enhver app.
+- **CSP:** App'en bruger en fast content security policy (ingen `csp: null`).

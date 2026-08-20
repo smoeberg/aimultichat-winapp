@@ -1,0 +1,15 @@
+{
+  "name": "aimultichat-winapp",
+  "version": "1.0.0",
+  "description": "AI MultiChat Windows Desktop Client (Tauri v2 + Rust)",
+  "type": "module",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

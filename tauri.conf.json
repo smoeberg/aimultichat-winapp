@@ -11,14 +11,16 @@
     "windows": [
       {
         "title": "AI MultiChat Desktop",
+        "label": "main",
         "width": 1280,
         "height": 840,
         "resizable": true,
-        "fullscreen": false
+        "fullscreen": false,
+        "skipTaskbar": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:* https:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:"
     }
   },
   "bundle": {
