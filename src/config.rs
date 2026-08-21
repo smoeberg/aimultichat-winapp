@@ -27,7 +27,7 @@ impl AppConfig {
         }
 
         Self {
-            server_url: "http://aichat.wm-group.dk".to_string(),
+            server_url: "https://aichat.wm-group.dk".to_string(),
         }
     }
 
