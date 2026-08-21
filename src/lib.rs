@@ -35,6 +35,7 @@ fn set_server_url(state: tauri::State<AppState>, url: String) -> Result<(), Stri
 }
 
 #[command]
+#[command]
 fn report_error(
     state: tauri::State<AppState>,
     error_type: String,
