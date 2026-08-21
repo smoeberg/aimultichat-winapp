@@ -20,6 +20,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -31,7 +37,6 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            // --- System tray with menu (Åbn / Skjul / Afslut) ---
             let open = MenuItem::with_id(app, "open", "Åbn", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Skjul", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Afslut", true, None::<&str>)?;
@@ -67,7 +72,6 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // --- Global hotkey: Ctrl+Shift+E ---
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
