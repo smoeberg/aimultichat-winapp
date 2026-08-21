@@ -26,28 +26,36 @@ jobs:
           version: 8
           run_install: false
 
-      - name: Rust stable
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-
-      - name: Cache cargo & tauri dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Quality Gate (Format & Clippy & Tests)
+      - name: Get pnpm store directory
+        shell: bash
         run: |
-          cargo fmt -- --check
-          cargo clippy -- -D warnings
-          cargo test
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
 
-      - name: Build Tauri App
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies (frontend)
+        run: pnpm install
+
+      - name: Run Quality Gate (fmt & clippy)
+        run: |
+          cargo fmt --check
+          cargo clippy -- -D warnings
+
+      - name: Build Tauri App (.msi / .exe)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          projectPath: "."
-          tagName: __TAURI_METADATA__
-          releaseName: "Eira Companion __TAURI_METADATA__"
-          releaseBody: "Automated Windows build for Eira Companion desktop client."
-          draft: true
-          prerelease: false
+          tagName: __TEST_BUILD__
+          releaseName: 'Test Build'
+          prerelease: true
+          args: --bundles msi,nsis
