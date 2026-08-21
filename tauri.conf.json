@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' https://aichat.wm-group.dk wss://aichat.wm-group.dk; connect-src 'self' http://localhost:* https://aichat.wm-group.dk wss://aichat.wm-group.dk; script-src 'self' https://aichat.wm-group.dk; style-src 'self' 'unsafe-inline' https://aichat.wm-group.dk; img-src 'self' data: https://aichat.wm-group.dk"
+      "csp": "default-src 'self' http://aichat.wm-group.dk https://aichat.wm-group.dk ws://aichat.wm-group.dk wss://aichat.wm-group.dk; connect-src 'self' http://localhost:* http://aichat.wm-group.dk https://aichat.wm-group.dk ws://aichat.wm-group.dk wss://aichat.wm-group.dk; script-src 'self' http://aichat.wm-group.dk https://aichat.wm-group.dk; style-src 'self' 'unsafe-inline' http://aichat.wm-group.dk https://aichat.wm-group.dk; img-src 'self' data: http://aichat.wm-group.dk https://aichat.wm-group.dk"
     }
   },
   "bundle": {
