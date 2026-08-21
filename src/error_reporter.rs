@@ -124,3 +124,52 @@ impl ErrorReporter {
         }
     }
 }
+
+impl ErrorReporter {
+    pub fn get_server_url(&self) -> String {
+        self.server_url.clone()
+    }
+
+    pub async fn report_error_static(
+        server_url: &str,
+        error_type: &str,
+        error_message: &str,
+        stack_trace: Option<&str>,
+        context: Option<serde_json::Value>,
+    ) -> Result<ReportResponse, String> {
+        let client = reqwest::Client::new();
+        let report = ErrorReport {
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            os_version: std::env::consts::OS.to_string(),
+            error_type: error_type.to_string(),
+            error_message: error_message.to_string(),
+            stack_trace: stack_trace.map(|s| s.to_string()),
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            device_id: Self::get_device_id(),
+            request_id: None,
+            context,
+        };
+
+        let response = client
+            .post(format!("{}/api/companion/error", server_url))
+            .json(&report)
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to send report: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("Server returned: {}", response.status()));
+        }
+
+        let data: ReportResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))?;
+
+        Ok(data)
+    }
+}

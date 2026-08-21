@@ -11,7 +11,7 @@ use std::sync::Mutex;
 use tauri::{
     command,
     menu::{Menu, MenuItem},
-    tray::TrayIconBuilder,
+    tray::{MouseButton, TrayIconBuilder},
     Manager,
 };
 
@@ -39,12 +39,20 @@ async fn report_error(
     error_message: String,
     context: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let result = {
+    // Hent URL uden at holde låsen over await
+    let server_url = {
         let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-        reporter
-            .report_error(&error_type, &error_message, None, context, None)
-            .await
+        reporter.get_server_url()
     };
+
+    let result = ErrorReporter::report_error_static(
+        &server_url,
+        &error_type,
+        &error_message,
+        None,
+        context,
+    )
+    .await;
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -74,18 +82,19 @@ async fn submit_user_report(
         "logs_snippet": logs_content,
     });
 
-    let result = {
+    let server_url = {
         let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-        reporter
-            .report_error(
-                "user_report",
-                "Bruger har indsendt en fejlrapport",
-                None,
-                Some(context),
-                None,
-            )
-            .await
+        reporter.get_server_url()
     };
+
+    let result = ErrorReporter::report_error_static(
+        &server_url,
+        "user_report",
+        "Bruger har indsendt en fejlrapport",
+        None,
+        Some(context),
+    )
+    .await;
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -185,7 +194,7 @@ pub fn run() {
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    if event.button == tauri::tray::MouseButton::Left {
+                    if event.button == MouseButton::Left {
                         let app_handle = tray.app_handle();
                         toggle_main_window(&app_handle);
                     }
