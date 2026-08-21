@@ -6,6 +6,7 @@ authors = ["Soeren Moeberg"]
 edition = "2021"
 
 [dependencies]
+dirs = "5.0"
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1.0", features = ["derive"] }
