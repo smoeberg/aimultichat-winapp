@@ -10,14 +10,15 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, Window,
+    Manager,
     command,
     WindowEvent,
 };
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub logger: Mutex<Logger>,
-    pub reporter: Mutex<ErrorReporter>,
+    pub reporter: ErrorReporter,
 }
 
 #[command]
@@ -33,9 +34,7 @@ fn set_server_url(url: String, state: tauri::State<'_, AppState>) -> Result<(), 
     config.server_url = url.clone();
     config.save()?;
 
-    if let Ok(mut reporter) = state.reporter.lock() {
-        reporter.update_server_url(&url);
-    }
+    state.reporter.update_server_url(&url);
     Ok(())
 }
 
@@ -51,12 +50,7 @@ async fn report_error_cmd(
     error_message: String,
     context: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let mut reporter = match state.reporter.lock() {
-        Ok(r) => r,
-        Err(_) => return Err("Kunne ikke få adgang til error reporter state".into()),
-    };
-
-    let result = reporter
+    let result = state.reporter
         .report_error(
             &error_type,
             &error_message,
@@ -111,12 +105,7 @@ async fn submit_user_report(
         "logs_snippet": logs_content,
     });
 
-    let mut reporter = match state.reporter.lock() {
-        Ok(r) => r,
-        Err(_) => return Err("Kunne ikke få adgang til error reporter state".into()),
-    };
-
-    let result = reporter
+    let result = state.reporter
         .report_error(
             "user_report",
             "Bruger har indsendt en fejlrapport",
@@ -180,7 +169,7 @@ pub fn run() {
 
     let app_state = AppState {
         logger: Mutex::new(logger),
-        reporter: Mutex::new(reporter),
+        reporter,
     };
 
     let builder = tauri::Builder::default()

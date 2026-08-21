@@ -1,6 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug, Serialize)]
@@ -25,7 +26,7 @@ pub struct ReportResponse {
 pub struct ErrorReporter {
     client: Client,
     server_url: String,
-    last_report_time: std::time::Instant,
+    last_report_time: Mutex<std::time::Instant>,
     min_interval: Duration,
     device_id: String,
 }
@@ -37,8 +38,8 @@ impl ErrorReporter {
         Self {
             client: Client::new(),
             server_url: server_url.to_string(),
-            last_report_time: std::time::Instant::now() - Duration::from_secs(120), // allow immediate first report
-            min_interval: Duration::from_secs(60), // Max 1 report per minute
+            last_report_time: Mutex::new(std::time::Instant::now() - Duration::from_secs(120)),
+            min_interval: Duration::from_secs(60),
             device_id,
         }
     }
@@ -69,18 +70,23 @@ impl ErrorReporter {
     }
 
     pub async fn report_error(
-        &mut self,
+        &self,
         error_type: &str,
         error_message: &str,
         stack_trace: Option<&str>,
         context: Option<serde_json::Value>,
         request_id: Option<&str>,
     ) -> Result<ReportResponse, String> {
-        // Rate limiting
-        if self.last_report_time.elapsed() < self.min_interval {
-            return Err("Rate limited (max 1 report per minute)".to_string());
+        {
+            let mut last_time = match self.last_report_time.lock() {
+                Ok(l) => l,
+                Err(e) => return Err(format!("Lock error: {}", e)),
+            };
+            if last_time.elapsed() < self.min_interval {
+                return Err("Rate limited (max 1 report per minute)".to_string());
+            }
+            *last_time = std::time::Instant::now();
         }
-        self.last_report_time = std::time::Instant::now();
 
         let report = ErrorReport {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
