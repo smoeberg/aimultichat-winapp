@@ -98,7 +98,7 @@ impl ErrorReporter {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            device_id: self.device_id,
+            device_id: self.device_id.clone(),
             request_id,
             context,
         };
