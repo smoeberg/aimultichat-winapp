@@ -1,5 +1,7 @@
 // src/logger.rs
-#![allow(dead_code)] // Tillader ubrugt kode – vi bruger den senere
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_mut)]
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -8,6 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct LogEntry {
     pub timestamp: u64,
     pub level: String,
@@ -16,6 +19,7 @@ pub struct LogEntry {
     pub context: Option<serde_json::Value>,
 }
 
+#[allow(dead_code)]
 pub struct Logger {
     log_dir: PathBuf,
     current_file: Option<File>,
@@ -24,6 +28,7 @@ pub struct Logger {
 }
 
 impl Logger {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let log_dir = dirs::data_local_dir()
             .unwrap_or_else(|| PathBuf::from("."))
@@ -35,11 +40,12 @@ impl Logger {
         Self {
             log_dir,
             current_file: None,
-            max_file_size: 5 * 1024 * 1024, // 5 MB
+            max_file_size: 5 * 1024 * 1024,
             max_files: 10,
         }
     }
 
+    #[allow(dead_code)]
     pub fn log(&mut self, level: &str, module: &str, message: &str, context: Option<serde_json::Value>) {
         let entry = LogEntry {
             timestamp: SystemTime::now()
@@ -55,6 +61,7 @@ impl Logger {
         self.write_entry(&entry);
     }
 
+    #[allow(dead_code)]
     fn write_entry(&mut self, entry: &LogEntry) {
         self.rotate_if_needed();
 
@@ -66,6 +73,7 @@ impl Logger {
         }
     }
 
+    #[allow(dead_code)]
     fn rotate_if_needed(&mut self) {
         if let Some(file) = &self.current_file {
             if let Ok(metadata) = file.metadata() {
@@ -89,6 +97,7 @@ impl Logger {
         self.cleanup_old_logs();
     }
 
+    #[allow(dead_code)]
     fn cleanup_old_logs(&self) {
         if let Ok(entries) = fs::read_dir(&self.log_dir) {
             let mut files: Vec<_> = entries
@@ -107,8 +116,8 @@ impl Logger {
         }
     }
 
+    #[allow(dead_code)]
     pub fn get_logs(&self, lines: usize) -> String {
-        // Simpel implementation – læs de seneste X linjer fra log-filer
         let mut all_logs = String::new();
         if let Ok(entries) = fs::read_dir(&self.log_dir) {
             let mut files: Vec<_> = entries
@@ -118,7 +127,6 @@ impl Logger {
 
             files.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
 
-            // Læs de nyeste filer
             for file in files.iter().rev().take(5) {
                 if let Ok(content) = fs::read_to_string(file.path()) {
                     let lines_vec: Vec<&str> = content.lines().collect();

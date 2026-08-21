@@ -185,7 +185,7 @@ pub fn run() {
                     } = event
                     {
                         let app_handle = tray.app_handle();
-                        toggle_main_window(&app_handle);
+                        toggle_main_window(app_handle);
                     }
                 })
                 .build(app)?;
