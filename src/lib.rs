@@ -2,10 +2,27 @@ use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
     Manager, Window,
+    command,
 };
+
+#[command]
+fn get_chat_url() -> String {
+    // Kan overstyres via miljøvariabel ved kompilering ellers standard Eira URL
+    std::env::var("EIRA_CHAT_URL").unwrap_or_else(|_| "https://ai.eira.dk/chat?embed=companion".into())
+}
 
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
+        // Monitor boundary check: sikker at vinduet ikke er off-screen
+        if let Ok(Some(monitor)) = window.current_monitor().map(|m| m.or_else(|| window.primary_monitor().ok().flatten())) {
+            let monitor_size = monitor.size();
+            if let Ok(pos) = window.outer_position() {
+                if pos.x < 0 || pos.x > monitor_size.width as i32 || pos.y < 0 || pos.y > monitor_size.height as i32 {
+                    let _ = window.center();
+                }
+            }
+        }
+
         if window.is_visible().unwrap_or(true) {
             let _ = window.hide();
         } else {
@@ -36,6 +53,7 @@ pub fn run() {
                 })
                 .build(),
         )
+        .invoke_handler(tauri::generate_handler![get_chat_url])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Åbn", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Skjul", true, None::<&str>)?;
@@ -44,7 +62,7 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::with_id("aimultichat-tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("AI MultiChat")
+                .tooltip("Eira Companion")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => {
