@@ -12,9 +12,8 @@ use tauri::{
     command,
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
-    Manager, WindowEvent,
+    Manager,
 };
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub reporter: Mutex<ErrorReporter>,
@@ -23,11 +22,9 @@ pub struct AppState {
 
 #[command]
 fn set_server_url(state: tauri::State<AppState>, url: String) -> Result<(), String> {
-    // Opdater reporter
     let mut reporter = state.reporter.lock().map_err(|e| e.to_string())?;
     reporter.update_server_url(&url);
 
-    // Opdater config
     let mut config = state.config.lock().map_err(|e| e.to_string())?;
     config.server_url = url;
     config.save()?;
@@ -42,10 +39,12 @@ async fn report_error(
     error_message: String,
     context: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-    let result = reporter
-        .report_error(&error_type, &error_message, None, context, None)
-        .await;
+    let result = {
+        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+        reporter
+            .report_error(&error_type, &error_message, None, context, None)
+            .await
+    };
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -62,7 +61,7 @@ async fn submit_user_report(
     description: String,
     include_logs: bool,
 ) -> Result<serde_json::Value, String> {
-    let mut logger = Logger::new();
+    let logger = Logger::new();
     let logs_content = if include_logs {
         logger.get_logs(100)
     } else {
@@ -75,16 +74,18 @@ async fn submit_user_report(
         "logs_snippet": logs_content,
     });
 
-    let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-    let result = reporter
-        .report_error(
-            "user_report",
-            "Bruger har indsendt en fejlrapport",
-            None,
-            Some(context),
-            None,
-        )
-        .await;
+    let result = {
+        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+        reporter
+            .report_error(
+                "user_report",
+                "Bruger har indsendt en fejlrapport",
+                None,
+                Some(context),
+                None,
+            )
+            .await
+    };
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -138,7 +139,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(state)
-        .plugin(tauri_plugin_global_shortcut::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -169,25 +170,22 @@ pub fn run() {
             let _tray = TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .on_menu_event(move |app, event| {
-                    match event.id.as_ref() {
-                        "quit" => {
-                            app.exit(0);
-                        }
-                        "toggle" => {
-                            toggle_main_window(app);
-                        }
-                        "hide" => {
-                            if let Some(window) = app.get_webview_window("main") {
-                                let _ = window.hide();
-                            }
-                        }
-                        _ => {}
+                .on_menu_event(move |app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
                     }
+                    "toggle" => {
+                        toggle_main_window(app);
+                    }
+                    "hide" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.hide();
+                        }
+                    }
+                    _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
-                    use tauri::tray::ClickType;
-                    if event.click_type == ClickType::Left {
+                    if event.button == tauri::tray::MouseButton::Left {
                         let app_handle = tray.app_handle();
                         toggle_main_window(&app_handle);
                     }
