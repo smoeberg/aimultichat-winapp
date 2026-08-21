@@ -65,4 +65,62 @@ impl ErrorReporter {
     pub fn update_server_url(&mut self, url: &str) {
         self.server_url = url.to_string();
     }
+
+    pub async fn report_error(
+        &self,
+        error_type: &str,
+        error_message: &str,
+        stack_trace: Option<String>,
+        context: Option<serde_json::Value>,
+        request_id: Option<String>,
+    ) -> Result<ReportResponse, String> {
+        // Check rate limit
+        {
+            let mut last_time = self.last_report_time.lock().map_err(|e| e.to_string())?;
+            if last_time.elapsed() < self.min_interval {
+                return Err("Rate limited (max 1 report per minute)".to_string());
+            }
+            *last_time = Instant::now();
+        }
+
+        let report = ErrorReport {
+            app_version: env!("CARGO_PKG_VERSION").to_string(),
+            os_version: std::env::consts::OS.to_string(),
+            error_type: error_type.to_string(),
+            error_message: error_message.to_string(),
+            stack_trace,
+            timestamp: std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+            device_id: self.device_id.clone(),
+            request_id,
+            context,
+        };
+
+        let client = reqwest::Client::new();
+        let response_result = client
+            .post(format!("{}/api/companion/error", self.server_url))
+            .json(&report)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
+
+        match response_result {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    match resp.json::<ReportResponse>().await {
+                        Ok(data) => Ok(data),
+                        Err(_) => Ok(ReportResponse {
+                            id: "unknown".to_string(),
+                            acknowledged: true,
+                        }),
+                    }
+                } else {
+                    Err(format!("Server svarede med status: {}", resp.status()))
+                }
+            }
+            Err(e) => Err(format!("Kunne ikke sende fejlrapport: {}", e)),
+        }
+    }
 }
