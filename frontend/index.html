@@ -16,6 +16,9 @@
             background: #f8fafc;
             height: 100vh;
             overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
         }
 
         /* Loading State */
@@ -24,7 +27,6 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
             gap: 16px;
         }
 
@@ -52,10 +54,11 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
             padding: 40px;
             text-align: center;
             background: #fef2f2;
+            width: 100%;
+            height: 100%;
         }
 
         #errorState .icon {
@@ -94,15 +97,6 @@
             background: #1e40af;
         }
 
-        /* Chat Frame */
-        #chatFrame {
-            width: 100%;
-            height: 100%;
-            border: none;
-            display: none;
-            background: white;
-        }
-
         /* Offline Badge */
         #offlineBadge {
             display: none;
@@ -126,7 +120,7 @@
     <!-- Loading State -->
     <div id="loadingState">
         <div class="spinner"></div>
-        <p>Indlæser Eira Companion...</p>
+        <p>Forbinder til Eira Companion...</p>
     </div>
 
     <!-- Error State -->
@@ -140,20 +134,15 @@
         <button id="retryBtn" class="retry-btn">Prøv igen</button>
     </div>
 
-    <!-- Chat Frame -->
-    <iframe id="chatFrame" src="about:blank" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
-
     <!-- Offline Badge -->
     <div id="offlineBadge">📡 Offline</div>
 
     <script type="module">
         const loadingState = document.getElementById('loadingState');
         const errorState = document.getElementById('errorState');
-        const chatFrame = document.getElementById('chatFrame');
         const offlineBadge = document.getElementById('offlineBadge');
         const retryBtn = document.getElementById('retryBtn');
 
-        let loadTimeout = null;
         let isOnline = navigator.onLine;
 
         async function getServerUrl() {
@@ -168,39 +157,15 @@
             return 'https://ai.eira.dk';
         }
 
-        async function loadChat() {
+        async function initCompanion() {
             try {
                 const serverUrl = await getServerUrl();
-
                 const targetUrl = `${serverUrl}/chat?embed=companion&sso=1&client=companion`;
-                chatFrame.src = targetUrl;
-                chatFrame.style.display = 'block';
-                loadingState.style.display = 'none';
-                errorState.style.display = 'none';
-
-                if (loadTimeout) clearTimeout(loadTimeout);
-                loadTimeout = setTimeout(() => {
-                    chatFrame.style.display = 'none';
-                    loadingState.style.display = 'none';
-                    errorState.style.display = 'flex';
-                }, 15000);
-
-                chatFrame.onload = () => {
-                    if (loadTimeout) clearTimeout(loadTimeout);
-                    chatFrame.style.display = 'block';
-                    loadingState.style.display = 'none';
-                    errorState.style.display = 'none';
-                };
-
-                chatFrame.onerror = () => {
-                    if (loadTimeout) clearTimeout(loadTimeout);
-                    chatFrame.style.display = 'none';
-                    loadingState.style.display = 'none';
-                    errorState.style.display = 'flex';
-                };
-
+                
+                // Directly navigate main webview to targetUrl (bypasses iframe framing restrictions completely)
+                window.location.href = targetUrl;
             } catch (error) {
-                console.error('Failed to load chat:', error);
+                console.error('Failed to initialize companion:', error);
                 loadingState.style.display = 'none';
                 errorState.style.display = 'flex';
             }
@@ -209,8 +174,7 @@
         function retryConnection() {
             loadingState.style.display = 'flex';
             errorState.style.display = 'none';
-            chatFrame.style.display = 'none';
-            loadChat();
+            initCompanion();
         }
 
         retryBtn.addEventListener('click', retryConnection);
@@ -231,7 +195,7 @@
         window.addEventListener('offline', updateOnlineStatus);
 
         window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(loadChat, 300);
+            setTimeout(initCompanion, 200);
         });
     </script>
 </body>

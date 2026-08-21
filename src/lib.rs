@@ -6,6 +6,7 @@ use tauri::{
     tray::TrayIconBuilder,
     Manager, Window,
     command,
+    WindowEvent,
 };
 
 #[command]
@@ -14,14 +15,9 @@ fn get_server_url() -> String {
     config.server_url
 }
 
+#[cfg(debug_assertions)]
 #[command]
 fn set_server_url(url: String) -> Result<(), String> {
-    // In production, restrict setting server URL unless explicitly enabled
-    #[cfg(not(debug_assertions))]
-    {
-        return Err("Ændring af server-URL er ikke tilladt i produktion".into());
-    }
-
     let mut config = AppConfig::load();
     config.server_url = url;
     config.save()?;
@@ -66,7 +62,7 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -84,12 +80,22 @@ pub fn run() {
                     }
                 })
                 .build(),
-        )
-        .invoke_handler(tauri::generate_handler![
-            get_server_url,
-            set_server_url,
-            get_app_version
-        ])
+        );
+
+    #[cfg(debug_assertions)]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        get_server_url,
+        set_server_url,
+        get_app_version
+    ]);
+
+    #[cfg(not(debug_assertions))]
+    let builder = builder.invoke_handler(tauri::generate_handler![
+        get_server_url,
+        get_app_version
+    ]);
+
+    builder
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Åbn", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Skjul", true, None::<&str>)?;
@@ -101,9 +107,12 @@ pub fn run() {
                 .ok_or_else(|| "Standardikon mangler under opstart".to_string())?
                 .clone();
 
+            let version = get_app_version();
+            let tooltip = format!("Eira Companion v{version}");
+
             let _tray = TrayIconBuilder::with_id("aimultichat-tray")
                 .icon(icon)
-                .tooltip("Eira Companion")
+                .tooltip(tooltip)
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => {
@@ -131,11 +140,27 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Close-to-tray implementation
+            if let Some(window) = app.get_webview_window("main") {
+                let win_clone = window.clone();
+                window.on_window_event(move |event| {
+                    if let WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        if let Err(e) = win_clone.hide() {
+                            eprintln!("Fejl ved luk til tray: {e}");
+                        }
+                    }
+                });
+            }
+
+            // Soft-fail global shortcut registration
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
             {
                 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
                 let shortcut = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyE);
-                app.global_shortcut().register(shortcut)?;
+                if let Err(e) = app.global_shortcut().register(shortcut) {
+                    eprintln!("Advarsel: Kunne ikke registrere global genvej Ctrl+Shift+E: {e}");
+                }
             }
 
             Ok(())

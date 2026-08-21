@@ -67,11 +67,11 @@ impl AppConfig {
             if let Some(host) = parsed.host_str() {
                 #[cfg(not(debug_assertions))]
                 {
-                    // Production strict allowlist: ai.eira.dk or subdomain, no custom ports
+                    // Production strict allowlist: exact match ai.eira.dk, no custom ports
                     if parsed.port().is_some() {
                         return false;
                     }
-                    return host == "ai.eira.dk" || host.ends_with(".ai.eira.dk");
+                    return host == "ai.eira.dk";
                 }
                 #[cfg(debug_assertions)]
                 {
@@ -86,7 +86,6 @@ impl AppConfig {
         let app_data = std::env::var("APPDATA")
             .map(PathBuf::from)
             .unwrap_or_else(|_| {
-                // Fallback to local temp if APPDATA is missing
                 std::env::temp_dir().join("eira-fallback")
             });
         app_data
@@ -95,6 +94,11 @@ impl AppConfig {
     }
 
     pub fn save(&self) -> Result<(), String> {
+        #[cfg(not(debug_assertions))]
+        {
+            return Err("Ændring af server-URL er ikke tilladt i produktion".into());
+        }
+
         if !Self::validate_url(&self.server_url) {
             return Err("Ugyldig eller ikke-tilladt server-URL".into());
         }
@@ -111,7 +115,6 @@ impl AppConfig {
         let content = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         fs::write(&temp_path, content).map_err(|e| e.to_string())?;
         
-        // Ensure atomic replace
         if let Err(e) = fs::rename(&temp_path, &path) {
             let _ = fs::remove_file(&temp_path);
             return Err(e.to_string());
