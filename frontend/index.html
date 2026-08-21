@@ -1,131 +1,244 @@
 <!DOCTYPE html>
 <html lang="da">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* https:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
-  <title>Eira Companion</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: linear-gradient(135deg, #2563eb 100%, #1e40af 0%);
-      color: #fff;
-      height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-    .container { text-align: center; padding: 40px; max-width: 440px; }
-    .logo {
-      width: 88px; height: 88px; margin: 0 auto 24px;
-      background: #ffffff; border-radius: 22px;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 16px 36px rgba(0,0,0,0.25);
-    }
-    .bubble { width: 48px; height: 48px; position: relative; }
-    .dot {
-      width: 10px; height: 10px; border-radius: 50%;
-      background: #2563eb; position: absolute; top: 18px;
-    }
-    .dot.d1 { left: 4px; }
-    .dot.d2 { left: 19px; }
-    .dot.d3 { left: 34px; }
-    h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 6px; }
-    p.sub { font-size: 15px; opacity: 0.8; margin-bottom: 24px; }
-    .spinner {
-      width: 32px; height: 32px; margin: 20px auto;
-      border: 3px solid rgba(255,255,255,0.3);
-      border-top-color: #fff; border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .error-box {
-      background: rgba(239, 68, 68, 0.15);
-      border: 1px solid rgba(239, 68, 68, 0.4);
-      padding: 16px; border-radius: 12px; margin-top: 16px;
-      display: none;
-    }
-    .error-box p { font-size: 14px; margin-bottom: 12px; }
-    .btn {
-      display: inline-block; padding: 10px 24px;
-      background: #ffffff; color: #1e40af; border-radius: 10px;
-      text-decoration: none; font-weight: 600; font-size: 14px;
-      border: none; cursor: pointer;
-      box-shadow: 0 4px 14px rgba(0,0,0,0.15);
-      transition: transform 0.1s ease;
-    }
-    .btn:active { transform: scale(0.97); }
-  </style>
-</head>
-<body>
-  <div class="container" id="loading-view">
-    <div class="logo">
-      <div class="bubble">
-        <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
-      </div>
-    </div>
-    <h1>Eira Companion</h1>
-    <p class="sub" id="status-text">Forbinder til Eira...</p>
-    <div class="spinner" id="spinner"></div>
-    <div class="error-box" id="error-box">
-      <p id="error-msg">Ingen internetforbindelse eller server utilgængelig.</p>
-      <button class="btn" id="retry-btn">Prøv igen</button>
-    </div>
-  </div>
-
-  <script>
-    const PING_TIMEOUT = 7000;
-
-    async function loadChat() {
-      const errorBox = document.getElementById("error-box");
-      const spinner = document.getElementById("spinner");
-      const subText = document.getElementById("status-text");
-
-      errorBox.style.display = "none";
-      spinner.style.display = "block";
-      subText.textContent = "Henter konfiguration...";
-
-      // Offline tjek
-      if (!navigator.onLine) {
-        spinner.style.display = "none";
-        errorBox.style.display = "block";
-        document.getElementById("error-msg").textContent = "Du er offline. Tjek din internetforbindelse.";
-        return;
-      }
-
-      try {
-        // Hent dynamisk CHAT_URL fra Rust backend (understøtter IT miljøvariable / config)
-        let chatUrl = "https://ai.eira.dk/chat?embed=companion";
-        if (window.__TAURI__ && window.__TAURI__.core) {
-          chatUrl = await window.__TAURI__.core.invoke("get_chat_url");
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* https: wss:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:">
+    <title>Eira Companion</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        subText.textContent = "Forbinder til server...";
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #f8fafc;
+            height: 100vh;
+            overflow: hidden;
+        }
 
-        // Timer til timeout hvis serveren ikke svarer
-        const timer = setTimeout(() => {
-          spinner.style.display = "none";
-          errorBox.style.display = "block";
-          document.getElementById("error-msg").textContent = "Forbindelse til server timeout.";
-        }, PING_TIMEOUT);
+        /* Loading State */
+        #loadingState {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            gap: 16px;
+        }
 
-        // Videresæt til chat URL
-        window.location.replace(chatUrl);
-      } catch (err) {
-        console.error("Fejl ved indlæsning af chat URL:", err);
-        spinner.style.display = "none";
-        errorBox.style.display = "block";
-        document.getElementById("error-msg").textContent = "Kunne ikke starte chat-klient.";
-      }
-    }
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #e2e8f0;
+            border-top-color: #2563eb;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
 
-    document.getElementById("retry-btn").addEventListener("click", loadChat);
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
 
-    window.addEventListener("DOMContentLoaded", () => {
-      setTimeout(loadChat, 300);
-    });
-  </script>
+        #loadingState p {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        /* Error State */
+        #errorState {
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 40px;
+            text-align: center;
+            background: #fef2f2;
+        }
+
+        #errorState .icon {
+            font-size: 56px;
+            margin-bottom: 16px;
+        }
+
+        #errorState h1 {
+            color: #1e293b;
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        #errorState p {
+            color: #64748b;
+            font-size: 14px;
+            max-width: 360px;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        #errorState .retry-btn {
+            padding: 10px 32px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        #errorState .retry-btn:hover {
+            background: #1e40af;
+        }
+
+        /* Chat Frame */
+        #chatFrame {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: none;
+            background: white;
+        }
+
+        /* Offline Badge */
+        #offlineBadge {
+            display: none;
+            position: fixed;
+            bottom: 16px;
+            right: 16px;
+            background: #ef4444;
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+            z-index: 9999;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Loading State -->
+    <div id="loadingState">
+        <div class="spinner"></div>
+        <p>Indlæser Eira Companion...</p>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState">
+        <div class="icon">🔌</div>
+        <h1>Ingen forbindelse</h1>
+        <p>
+            Kunne ikke oprette forbindelse til Eira-serveren.<br />
+            Kontroller din internetforbindelse og prøv igen.
+        </p>
+        <button class="retry-btn" onclick="retryConnection()">Prøv igen</button>
+    </div>
+
+    <!-- Chat Frame -->
+    <iframe id="chatFrame" src="about:blank"></iframe>
+
+    <!-- Offline Badge -->
+    <div id="offlineBadge">📡 Offline</div>
+
+    <script type="module">
+        const loadingState = document.getElementById('loadingState');
+        const errorState = document.getElementById('errorState');
+        const chatFrame = document.getElementById('chatFrame');
+        const offlineBadge = document.getElementById('offlineBadge');
+
+        let serverUrl = '';
+        let loadTimeout = null;
+        let isOnline = navigator.onLine;
+
+        async function getServerUrl() {
+            try {
+                if (window.__TAURI__ && window.__TAURI__.core) {
+                    const url = await window.__TAURI__.core.invoke('get_server_url');
+                    serverUrl = url;
+                    localStorage.setItem('eira-server-url', url);
+                    return url;
+                }
+            } catch (error) {
+                console.error('Failed to get server URL from Tauri:', error);
+            }
+            const cached = localStorage.getItem('eira-server-url');
+            if (cached) {
+                serverUrl = cached;
+                return cached;
+            }
+            return 'https://ai.eira.dk';
+        }
+
+        async function loadChat() {
+            try {
+                await getServerUrl();
+
+                const targetUrl = `${serverUrl}/chat?embed=companion&sso=1&client=companion`;
+                chatFrame.src = targetUrl;
+                chatFrame.style.display = 'block';
+                loadingState.style.display = 'none';
+                errorState.style.display = 'none';
+
+                if (loadTimeout) clearTimeout(loadTimeout);
+                loadTimeout = setTimeout(() => {
+                    chatFrame.style.display = 'none';
+                    loadingState.style.display = 'none';
+                    errorState.style.display = 'flex';
+                }, 15000);
+
+                chatFrame.onload = () => {
+                    if (loadTimeout) clearTimeout(loadTimeout);
+                    chatFrame.style.display = 'block';
+                    loadingState.style.display = 'none';
+                    errorState.style.display = 'none';
+                };
+
+                chatFrame.onerror = () => {
+                    if (loadTimeout) clearTimeout(loadTimeout);
+                    chatFrame.style.display = 'none';
+                    loadingState.style.display = 'none';
+                    errorState.style.display = 'flex';
+                };
+
+            } catch (error) {
+                console.error('Failed to load chat:', error);
+                loadingState.style.display = 'none';
+                errorState.style.display = 'flex';
+            }
+        }
+
+        window.retryConnection = function() {
+            loadingState.style.display = 'flex';
+            errorState.style.display = 'none';
+            chatFrame.style.display = 'none';
+            loadChat();
+        };
+
+        function updateOnlineStatus() {
+            isOnline = navigator.onLine;
+            if (isOnline) {
+                offlineBadge.style.display = 'none';
+                if (errorState.style.display === 'flex') {
+                    retryConnection();
+                }
+            } else {
+                offlineBadge.style.display = 'block';
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(loadChat, 300);
+        });
+    </script>
 </body>
 </html>

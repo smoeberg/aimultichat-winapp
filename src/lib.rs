@@ -1,3 +1,6 @@
+mod config;
+
+use config::AppConfig;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -6,8 +9,17 @@ use tauri::{
 };
 
 #[command]
-fn get_chat_url() -> String {
-    std::env::var("EIRA_CHAT_URL").unwrap_or_else(|_| "https://ai.eira.dk/chat?embed=companion&client=companion".into())
+fn get_server_url() -> String {
+    let config = AppConfig::load();
+    config.server_url
+}
+
+#[command]
+fn set_server_url(url: String) -> Result<(), String> {
+    let mut config = AppConfig::load();
+    config.server_url = url;
+    config.save()?;
+    Ok(())
 }
 
 #[command]
@@ -56,7 +68,11 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![get_chat_url, get_app_version])
+        .invoke_handler(tauri::generate_handler![
+            get_server_url,
+            set_server_url,
+            get_app_version
+        ])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Åbn", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Skjul", true, None::<&str>)?;
