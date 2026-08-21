@@ -20,7 +20,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://localhost:* https:; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:"
+      "csp": "default-src 'self' https://ai.eira.dk wss://ai.eira.dk; connect-src 'self' http://localhost:* https://ai.eira.dk wss://ai.eira.dk; script-src 'self' https://ai.eira.dk; style-src 'self' 'unsafe-inline' https://ai.eira.dk; img-src 'self' data: https://ai.eira.dk"
     }
   },
   "bundle": {

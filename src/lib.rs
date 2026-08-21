@@ -7,13 +7,16 @@ use tauri::{
 
 #[command]
 fn get_chat_url() -> String {
-    // Kan overstyres via miljøvariabel ved kompilering ellers standard Eira URL
-    std::env::var("EIRA_CHAT_URL").unwrap_or_else(|_| "https://ai.eira.dk/chat?embed=companion".into())
+    std::env::var("EIRA_CHAT_URL").unwrap_or_else(|_| "https://ai.eira.dk/chat?embed=companion&client=companion".into())
+}
+
+#[command]
+fn get_app_version() -> String {
+    env!("CARGO_PKG_VERSION").into()
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        // Monitor boundary check: sikker at vinduet ikke er off-screen
         if let Ok(Some(monitor)) = window.current_monitor().map(|m| m.or_else(|| window.primary_monitor().ok().flatten())) {
             let monitor_size = monitor.size();
             if let Ok(pos) = window.outer_position() {
@@ -53,7 +56,7 @@ pub fn run() {
                 })
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![get_chat_url])
+        .invoke_handler(tauri::generate_handler![get_chat_url, get_app_version])
         .setup(|app| {
             let open = MenuItem::with_id(app, "open", "Åbn", true, None::<&str>)?;
             let hide = MenuItem::with_id(app, "hide", "Skjul", true, None::<&str>)?;
