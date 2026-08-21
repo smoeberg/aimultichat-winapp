@@ -1,52 +1,53 @@
-name: Windows Build & Release
+name: Build Eira Companion WinApp
 
 on:
   push:
-    tags:
-      - "v*"
-  workflow_dispatch:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: pnpm
+          node-version: 18
 
-      - name: Setup Rust (MSVC)
-        uses: dtolnay/rust-toolchain@stable
+      - name: Install pnpm
+        uses: pnpm/action-setup@v2
         with:
-          targets: x86_64-pc-windows-msvc
+          version: 8
+          run_install: false
 
-      - name: Cache Cargo
-        uses: actions/cache@v4
+      - name: Rust stable
+        uses: dtolnay/rust-action@stable
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          components: rustfmt, clippy
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Cache cargo & tauri dependencies
+        uses: Swatinem/rust-cache@v2
 
-      - name: Build & Release Windows app
+      - name: Quality Gate (Format & Clippy & Tests)
+        run: |
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+          cargo test
+
+      - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "AI MultiChat WinApp ${{ github.ref_name }}"
-          releaseBody: "Windows-desktopklient til AI MultiChat."
-          releaseDraft: true
-          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: "."
+          tagName: __TAURI_METADATA__
+          releaseName: "Eira Companion __TAURI_METADATA__"
+          releaseBody: "Automated Windows build for Eira Companion desktop client."
+          draft: true
+          prerelease: false

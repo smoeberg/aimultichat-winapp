@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:* https: wss:; style-src 'self' 'unsafe-inline' https:; script-src 'self' 'unsafe-inline' https:">
     <title>Eira Companion</title>
     <style>
         * {
@@ -153,32 +152,25 @@
         const chatFrame = document.getElementById('chatFrame');
         const offlineBadge = document.getElementById('offlineBadge');
 
-        let serverUrl = '';
         let loadTimeout = null;
         let isOnline = navigator.onLine;
 
         async function getServerUrl() {
-            try {
-                if (window.__TAURI__ && window.__TAURI__.core) {
+            // P1-03: Tauri is single source of truth. No localStorage fallback.
+            if (window.__TAURI__ && window.__TAURI__.core) {
+                try {
                     const url = await window.__TAURI__.core.invoke('get_server_url');
-                    serverUrl = url;
-                    localStorage.setItem('eira-server-url', url);
-                    return url;
+                    if (url) return url;
+                } catch (error) {
+                    console.error('Failed to get server URL from Tauri backend:', error);
                 }
-            } catch (error) {
-                console.error('Failed to get server URL from Tauri:', error);
-            }
-            const cached = localStorage.getItem('eira-server-url');
-            if (cached) {
-                serverUrl = cached;
-                return cached;
             }
             return 'https://ai.eira.dk';
         }
 
         async function loadChat() {
             try {
-                await getServerUrl();
+                const serverUrl = await getServerUrl();
 
                 const targetUrl = `${serverUrl}/chat?embed=companion&sso=1&client=companion`;
                 chatFrame.src = targetUrl;
