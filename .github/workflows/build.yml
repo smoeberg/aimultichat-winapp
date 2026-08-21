@@ -45,6 +45,9 @@ jobs:
       - name: Install dependencies (frontend)
         run: pnpm install
 
+      - name: Clean cargo build artifacts to prevent stale cache
+        run: cargo clean
+
       - name: Run Quality Gate (fmt & clippy)
         run: |
           cargo fmt --check
