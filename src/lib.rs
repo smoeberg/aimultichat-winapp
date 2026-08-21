@@ -11,10 +11,9 @@ use std::sync::Mutex;
 use tauri::{
     command,
     menu::{Menu, MenuItem},
-    tray::{MouseButton, TrayIconBuilder},
+    tray::{MouseButton, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
-// FIX 1: Import GlobalShortcutExt
 use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
@@ -34,7 +33,6 @@ fn set_server_url(state: tauri::State<AppState>, url: String) -> Result<(), Stri
     Ok(())
 }
 
-#[command]
 #[command]
 fn report_error(
     state: tauri::State<AppState>,
@@ -150,7 +148,6 @@ pub fn run() {
                 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
                 let shortcut =
                     Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyE);
-                // FIX: Brug app.handle() i stedet for app direkte
                 if let Err(e) = app.handle().global_shortcut().register(shortcut) {
                     eprintln!("Advarsel: Kunne ikke registrere global genvej Ctrl+Shift+E: {e}");
                 }
@@ -180,17 +177,15 @@ pub fn run() {
                     }
                     _ => {}
                 })
-                // FIX 2: Brug pattern matching i stedet for event.button
                 .on_tray_icon_event(|tray, event| {
-                    match event {
-                        tauri::tray::TrayIconEvent::Click {
-                            button: MouseButton::Left,
-                            ..
-                        } => {
-                            let app_handle = tray.app_handle();
-                            toggle_main_window(&app_handle);
-                        }
-                        _ => {}
+                    // FIX: Brug if let i stedet for match
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        ..
+                    } = event
+                    {
+                        let app_handle = tray.app_handle();
+                        toggle_main_window(&app_handle);
                     }
                 })
                 .build(app)?;

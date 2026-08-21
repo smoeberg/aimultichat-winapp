@@ -1,8 +1,11 @@
-use serde::{Deserialize, Serialize};
+// src/logger.rs
+#![allow(dead_code)] // Tillader ubrugt kode – vi bruger den senere
+
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogEntry {
@@ -22,7 +25,11 @@ pub struct Logger {
 
 impl Logger {
     pub fn new() -> Self {
-        let log_dir = Self::get_log_dir();
+        let log_dir = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Eira Companion")
+            .join("logs");
+
         fs::create_dir_all(&log_dir).unwrap_or_default();
 
         Self {
@@ -31,13 +38,6 @@ impl Logger {
             max_file_size: 5 * 1024 * 1024, // 5 MB
             max_files: 10,
         }
-    }
-
-    fn get_log_dir() -> PathBuf {
-        let app_data = std::env::var("APPDATA")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| std::env::temp_dir().join("eira-fallback"));
-        app_data.join("Eira Companion").join("logs")
     }
 
     pub fn log(&mut self, level: &str, module: &str, message: &str, context: Option<serde_json::Value>) {
@@ -58,10 +58,7 @@ impl Logger {
     fn write_entry(&mut self, entry: &LogEntry) {
         self.rotate_if_needed();
 
-        let line = match serde_json::to_string(entry) {
-            Ok(l) => l + "\n",
-            Err(_) => return,
-        };
+        let line = serde_json::to_string(entry).unwrap_or_default() + "\n";
 
         if let Some(file) = &mut self.current_file {
             let _ = file.write_all(line.as_bytes());
@@ -110,35 +107,30 @@ impl Logger {
         }
     }
 
-    pub fn get_logs(&self, max_lines: usize) -> String {
-        let mut all_logs = Vec::new();
+    pub fn get_logs(&self, lines: usize) -> String {
+        // Simpel implementation – læs de seneste X linjer fra log-filer
+        let mut all_logs = String::new();
         if let Ok(entries) = fs::read_dir(&self.log_dir) {
             let mut files: Vec<_> = entries
                 .filter_map(|e| e.ok())
                 .filter(|e| e.file_type().map(|f| f.is_file()).unwrap_or(false))
                 .collect();
 
-            // Sort newest first
-            files.sort_by_key(|e| std::cmp::Reverse(e.metadata().and_then(|m| m.modified()).ok()));
+            files.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).ok());
 
-            for file_entry in files {
-                if let Ok(mut f) = File::open(file_entry.path()) {
-                    let mut content = String::new();
-                    if f.read_to_string(&mut content).is_ok() {
-                        for line in content.lines().rev() {
-                            all_logs.push(line.to_string());
-                            if all_logs.len() >= max_lines {
-                                break;
-                            }
-                        }
+            // Læs de nyeste filer
+            for file in files.iter().rev().take(5) {
+                if let Ok(content) = fs::read_to_string(file.path()) {
+                    let lines_vec: Vec<&str> = content.lines().collect();
+                    let take = lines_vec.len().min(lines);
+                    let start = lines_vec.len().saturating_sub(take);
+                    for line in &lines_vec[start..] {
+                        all_logs.push_str(line);
+                        all_logs.push('\n');
                     }
-                }
-                if all_logs.len() >= max_lines {
-                    break;
                 }
             }
         }
-        all_logs.reverse();
-        all_logs.join("\n")
+        all_logs
     }
 }
