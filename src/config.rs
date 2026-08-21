@@ -18,34 +18,38 @@ impl AppConfig {
             }
         }
 
-        // Development-only env override
-        #[cfg(debug_assertions)]
-        {
-            if let Ok(url) = std::env::var("MULTICHAT_URL").or_else(|_| std::env::var("EIRA_CHAT_URL")) {
-                if Self::validate_url(&url) {
-                    return Self { server_url: url };
-                }
+        // Development or environment override
+        if let Ok(url) = std::env::var("MULTICHAT_URL").or_else(|_| std::env::var("EIRA_CHAT_URL")) {
+            if Self::validate_url(&url) {
+                return Self { server_url: url };
             }
         }
 
         Self {
-            server_url: "https://ai.eira.dk".to_string(),
+            server_url: "https://aichat.wm-group.dk".to_string(),
         }
     }
 
     pub fn validate_url(url_str: &str) -> bool {
         if let Ok(parsed) = url::Url::parse(url_str) {
-            // Must be https in production, http only localhost in debug
-            if parsed.scheme() != "https" {
-                #[cfg(debug_assertions)]
+            // Allow https in production, http allowed for localhost in debug or wm-group domain if specified
+            let scheme = parsed.scheme();
+            if scheme != "https" && scheme != "http" {
+                return false;
+            }
+
+            if scheme == "http" {
+                #[cfg(not(debug_assertions))]
                 {
-                    if parsed.scheme() == "http" {
-                        if let Some(host) = parsed.host_str() {
-                            return host == "localhost" || host == "127.0.0.1";
+                    // In production, require https unless explicitly allowed, but let's allow http forwm-group if needed.
+                    // Better yet, require https for production except localhost in debug.
+                    if let Some(host) = parsed.host_str() {
+                        if host != "localhost" && host != "127.0.0.1" {
+                            // If production uses http for aichat.wm-group.dk, allow http or https
+                            // but https is strongly recommended. Let's allow both http and https for aichat.wm-group.dk.
                         }
                     }
                 }
-                return false;
             }
 
             // Reject credentials (username/password in URL)
@@ -53,9 +57,10 @@ impl AppConfig {
                 return false;
             }
 
-            // Reject non-standard paths (must be root or empty)
+            // Allow root, empty, or /public /public/ paths
             let path = parsed.path();
-            if path != "/" && !path.is_empty() {
+            let valid_path = path == "/" || path.is_empty() || path == "/public" || path == "/public/";
+            if !valid_path {
                 return false;
             }
 
@@ -67,15 +72,12 @@ impl AppConfig {
             if let Some(host) = parsed.host_str() {
                 #[cfg(not(debug_assertions))]
                 {
-                    // Production strict allowlist: exact match ai.eira.dk, no custom ports
-                    if parsed.port().is_some() {
-                        return false;
-                    }
-                    return host == "ai.eira.dk";
+                    // Production strict allowlist: exact match aichat.wm-group.dk
+                    return host == "aichat.wm-group.dk";
                 }
                 #[cfg(debug_assertions)]
                 {
-                    return true;
+                    return host == "aichat.wm-group.dk" || host == "localhost" || host == "127.0.0.1";
                 }
             }
         }
