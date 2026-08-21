@@ -28,7 +28,6 @@ impl AppConfig {
             }
         }
 
-        // Production default & hard enforcement
         Self {
             server_url: "https://ai.eira.dk".to_string(),
         }
@@ -36,8 +35,8 @@ impl AppConfig {
 
     pub fn validate_url(url_str: &str) -> bool {
         if let Ok(parsed) = url::Url::parse(url_str) {
+            // Must be https in production, http only localhost in debug
             if parsed.scheme() != "https" {
-                // Allow http only on localhost during debug
                 #[cfg(debug_assertions)]
                 {
                     if parsed.scheme() == "http" {
@@ -49,10 +48,29 @@ impl AppConfig {
                 return false;
             }
 
+            // Reject credentials (username/password in URL)
+            if !parsed.username().is_empty() || parsed.password().is_some() {
+                return false;
+            }
+
+            // Reject non-standard paths (must be root or empty)
+            let path = parsed.path();
+            if path != "/" && !path.is_empty() {
+                return false;
+            }
+
+            // Reject query strings and fragments in base config URL
+            if parsed.query().is_some() || parsed.fragment().is_some() {
+                return false;
+            }
+
             if let Some(host) = parsed.host_str() {
                 #[cfg(not(debug_assertions))]
                 {
-                    // Production strict allowlist: must be ai.eira.dk or subdomain
+                    // Production strict allowlist: ai.eira.dk or subdomain, no custom ports
+                    if parsed.port().is_some() {
+                        return false;
+                    }
                     return host == "ai.eira.dk" || host.ends_with(".ai.eira.dk");
                 }
                 #[cfg(debug_assertions)]
@@ -67,7 +85,10 @@ impl AppConfig {
     fn get_config_path() -> PathBuf {
         let app_data = std::env::var("APPDATA")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("."));
+            .unwrap_or_else(|_| {
+                // Fallback to local temp if APPDATA is missing
+                std::env::temp_dir().join("eira-fallback")
+            });
         app_data
             .join("Eira Companion")
             .join("config.json")
@@ -83,11 +104,18 @@ impl AppConfig {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
 
-        // P1-01: Atomic write via temp file
-        let temp_path = path.with_extension("tmp");
+        // Atomic write via temp file in the same directory
+        let temp_filename = format!("config_{}.tmp", std::process::id());
+        let temp_path = path.with_file_name(temp_filename);
+        
         let content = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         fs::write(&temp_path, content).map_err(|e| e.to_string())?;
-        fs::rename(&temp_path, &path).map_err(|e| e.to_string())?;
+        
+        // Ensure atomic replace
+        if let Err(e) = fs::rename(&temp_path, &path) {
+            let _ = fs::remove_file(&temp_path);
+            return Err(e.to_string());
+        }
 
         Ok(())
     }

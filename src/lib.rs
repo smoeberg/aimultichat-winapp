@@ -16,6 +16,12 @@ fn get_server_url() -> String {
 
 #[command]
 fn set_server_url(url: String) -> Result<(), String> {
+    // In production, restrict setting server URL unless explicitly enabled
+    #[cfg(not(debug_assertions))]
+    {
+        return Err("Ændring af server-URL er ikke tilladt i produktion".into());
+    }
+
     let mut config = AppConfig::load();
     config.server_url = url;
     config.save()?;
@@ -33,16 +39,27 @@ fn toggle_main_window(app: &tauri::AppHandle) {
             let monitor_size = monitor.size();
             if let Ok(pos) = window.outer_position() {
                 if pos.x < 0 || pos.x > monitor_size.width as i32 || pos.y < 0 || pos.y > monitor_size.height as i32 {
-                    let _ = window.center();
+                    if let Err(e) = window.center() {
+                        eprintln!("Kunne ikke centrere vindue: {e}");
+                    }
                 }
             }
         }
 
-        if window.is_visible().unwrap_or(true) {
-            let _ = window.hide();
-        } else {
-            let _ = window.show();
-            let _ = window.set_focus();
+        match window.is_visible() {
+            Ok(true) => {
+                if let Err(e) = window.hide() {
+                    eprintln!("Fejl ved skjul af vindue: {e}");
+                }
+            }
+            _ => {
+                if let Err(e) = window.show() {
+                    eprintln!("Fejl ved visning af vindue: {e}");
+                }
+                if let Err(e) = window.set_focus() {
+                    eprintln!("Fejl ved fokusering af vindue: {e}");
+                }
+            }
         }
     }
 }
@@ -79,8 +96,13 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Afslut", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &hide, &quit])?;
 
+            let icon = app
+                .default_window_icon()
+                .ok_or_else(|| "Standardikon mangler under opstart".to_string())?
+                .clone();
+
             let _tray = TrayIconBuilder::with_id("aimultichat-tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(icon)
                 .tooltip("Eira Companion")
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {

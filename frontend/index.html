@@ -137,11 +137,11 @@
             Kunne ikke oprette forbindelse til Eira-serveren.<br />
             Kontroller din internetforbindelse og prøv igen.
         </p>
-        <button class="retry-btn" onclick="retryConnection()">Prøv igen</button>
+        <button id="retryBtn" class="retry-btn">Prøv igen</button>
     </div>
 
     <!-- Chat Frame -->
-    <iframe id="chatFrame" src="about:blank"></iframe>
+    <iframe id="chatFrame" src="about:blank" sandbox="allow-scripts allow-forms allow-same-origin allow-popups"></iframe>
 
     <!-- Offline Badge -->
     <div id="offlineBadge">📡 Offline</div>
@@ -151,12 +151,12 @@
         const errorState = document.getElementById('errorState');
         const chatFrame = document.getElementById('chatFrame');
         const offlineBadge = document.getElementById('offlineBadge');
+        const retryBtn = document.getElementById('retryBtn');
 
         let loadTimeout = null;
         let isOnline = navigator.onLine;
 
         async function getServerUrl() {
-            // P1-03: Tauri is single source of truth. No localStorage fallback.
             if (window.__TAURI__ && window.__TAURI__.core) {
                 try {
                     const url = await window.__TAURI__.core.invoke('get_server_url');
@@ -206,12 +206,14 @@
             }
         }
 
-        window.retryConnection = function() {
+        function retryConnection() {
             loadingState.style.display = 'flex';
             errorState.style.display = 'none';
             chatFrame.style.display = 'none';
             loadChat();
-        };
+        }
+
+        retryBtn.addEventListener('click', retryConnection);
 
         function updateOnlineStatus() {
             isOnline = navigator.onLine;
