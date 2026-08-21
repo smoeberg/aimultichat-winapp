@@ -19,7 +19,8 @@ impl AppConfig {
         }
 
         // Development or environment override
-        if let Ok(url) = std::env::var("MULTICHAT_URL").or_else(|_| std::env::var("EIRA_CHAT_URL")) {
+        if let Ok(url) = std::env::var("MULTICHAT_URL").or_else(|_| std::env::var("EIRA_CHAT_URL"))
+        {
             if Self::validate_url(&url) {
                 return Self { server_url: url };
             }
@@ -59,7 +60,8 @@ impl AppConfig {
 
             // Allow root, empty, or /public /public/ paths
             let path = parsed.path();
-            let valid_path = path == "/" || path.is_empty() || path == "/public" || path == "/public/";
+            let valid_path =
+                path == "/" || path.is_empty() || path == "/public" || path == "/public/";
             if !valid_path {
                 return false;
             }
@@ -77,7 +79,9 @@ impl AppConfig {
                 }
                 #[cfg(debug_assertions)]
                 {
-                    return host == "aichat.wm-group.dk" || host == "localhost" || host == "127.0.0.1";
+                    return host == "aichat.wm-group.dk"
+                        || host == "localhost"
+                        || host == "127.0.0.1";
                 }
             }
         }
@@ -87,12 +91,8 @@ impl AppConfig {
     fn get_config_path() -> PathBuf {
         let app_data = std::env::var("APPDATA")
             .map(PathBuf::from)
-            .unwrap_or_else(|_| {
-                std::env::temp_dir().join("eira-fallback")
-            });
-        app_data
-            .join("Eira Companion")
-            .join("config.json")
+            .unwrap_or_else(|_| std::env::temp_dir().join("eira-fallback"));
+        app_data.join("Eira Companion").join("config.json")
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -113,10 +113,10 @@ impl AppConfig {
         // Atomic write via temp file in the same directory
         let temp_filename = format!("config_{}.tmp", std::process::id());
         let temp_path = path.with_file_name(temp_filename);
-        
+
         let content = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
         fs::write(&temp_path, content).map_err(|e| e.to_string())?;
-        
+
         if let Err(e) = fs::rename(&temp_path, &path) {
             let _ = fs::remove_file(&temp_path);
             return Err(e.to_string());

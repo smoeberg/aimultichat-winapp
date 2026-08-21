@@ -3,11 +3,11 @@
 #![allow(unused_variables)]
 #![allow(unused_mut)]
 
+use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
@@ -46,7 +46,13 @@ impl Logger {
     }
 
     #[allow(dead_code)]
-    pub fn log(&mut self, level: &str, module: &str, message: &str, context: Option<serde_json::Value>) {
+    pub fn log(
+        &mut self,
+        level: &str,
+        module: &str,
+        message: &str,
+        context: Option<serde_json::Value>,
+    ) {
         let entry = LogEntry {
             timestamp: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
