@@ -18,7 +18,7 @@ use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub logger: Mutex<Logger>,
-    pub reporter: ErrorReporter,
+    pub reporter: Mutex<ErrorReporter>,
 }
 
 #[command]
@@ -34,7 +34,8 @@ fn set_server_url(url: String, state: tauri::State<'_, AppState>) -> Result<(), 
     config.server_url = url.clone();
     config.save()?;
 
-    state.reporter.update_server_url(&url);
+    let mut reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+    reporter.update_server_url(&url);
     Ok(())
 }
 
@@ -50,26 +51,74 @@ async fn report_error_cmd(
     error_message: String,
     context: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    let result = state.reporter
-        .report_error(
-            &error_type,
-            &error_message,
-            None,
-            context,
-            None,
+    let (server_url, device_id, min_interval, last_report_time_val) = {
+        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+        (
+            reporter.server_url.clone(),
+            reporter.device_id.clone(),
+            reporter.min_interval,
+            *reporter.last_report_time.lock().unwrap(),
         )
+    };
+
+    if last_report_time_val.elapsed() < min_interval {
+        return Err("Rate limited (max 1 report per minute)".to_string());
+    }
+
+    {
+        if let Ok(mut reporter) = state.reporter.lock() {
+            *reporter.last_report_time.lock().unwrap() = std::time::Instant::now();
+        }
+    }
+
+    let report = error_reporter::ErrorReport {
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        os_version: std::env::consts::OS.to_string(),
+        error_type: error_type.clone(),
+        error_message: error_message.clone(),
+        stack_trace: None,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        device_id,
+        request_id: None,
+        context,
+    };
+
+    let client = reqwest::Client::new();
+    let response_result = client
+        .post(format!("{}/api/companion/error", server_url))
+        .json(&report)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
         .await;
 
-    match result {
-        Ok(response) => Ok(serde_json::json!({
-            "success": true,
-            "report_id": response.id,
-        })),
-        Err(e) => {
-            if let Ok(mut logger) = state.logger.lock() {
-                logger.log("error", "error_reporter", &e, None);
+    match response_result {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                if let Ok(data) = resp.json::<error_reporter::ReportResponse>().await {
+                    Ok(serde_json::json!({
+                        "success": true,
+                        "report_id": data.id,
+                    }))
+                } else {
+                    Ok(serde_json::json!({ "success": true }))
+                }
+            } else {
+                let err_str = format!("Server svarede med status: {}", resp.status());
+                if let Ok(mut logger) = state.logger.lock() {
+                    logger.log("error", "error_reporter", &err_str, None);
+                }
+                Err(err_str)
             }
-            Err(e)
+        }
+        Err(e) => {
+            let err_str = format!("Kunne ikke sende fejlrapport til server: {}", e);
+            if let Ok(mut logger) = state.logger.lock() {
+                logger.log("error", "error_reporter", &err_str, None);
+            }
+            Err(err_str)
         }
     }
 }
@@ -105,28 +154,51 @@ async fn submit_user_report(
         "logs_snippet": logs_content,
     });
 
-    let result = state.reporter
-        .report_error(
-            "user_report",
-            "Bruger har indsendt en fejlrapport",
-            None,
-            Some(context),
-            None,
-        )
+    let (server_url, device_id) = {
+        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+        (reporter.server_url.clone(), reporter.device_id.clone())
+    };
+
+    let report = error_reporter::ErrorReport {
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+        os_version: std::env::consts::OS.to_string(),
+        error_type: "user_report".to_string(),
+        error_message: "Bruger har indsendt en fejlrapport".to_string(),
+        stack_trace: None,
+        timestamp: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
+        device_id,
+        request_id: None,
+        context: Some(context),
+    };
+
+    let client = reqwest::Client::new();
+    let response_result = client
+        .post(format!("{}/api/companion/error", server_url))
+        .json(&report)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
         .await;
 
-    match result {
-        Ok(response) => Ok(serde_json::json!({
-            "success": true,
-            "report_id": response.id,
-            "message": "Tak for din fejlrapport. Den er sendt til support.",
-        })),
-        Err(e) => {
-            if let Ok(mut logger) = state.logger.lock() {
-                logger.log("error", "user_report", &e, None);
+    match response_result {
+        Ok(resp) => {
+            if resp.status().is_success() {
+                let report_id = resp.json::<error_reporter::ReportResponse>()
+                    .await
+                    .map(|r| r.id)
+                    .unwrap_or_else(|_| "unknown".to_string());
+                Ok(serde_json::json!({
+                    "success": true,
+                    "report_id": report_id,
+                    "message": "Tak for din fejlrapport. Den er sendt til support.",
+                }))
+            } else {
+                Err(format!("Server svarede med status: {}", resp.status()))
             }
-            Err(e)
         }
+        Err(e) => Err(format!("Kunne ikke sende fejlrapport: {}", e)),
     }
 }
 
@@ -169,7 +241,7 @@ pub fn run() {
 
     let app_state = AppState {
         logger: Mutex::new(logger),
-        reporter,
+        reporter: Mutex::new(reporter),
     };
 
     let builder = tauri::Builder::default()

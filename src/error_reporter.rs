@@ -1,8 +1,7 @@
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 #[derive(Debug, Serialize)]
 pub struct ErrorReport {
@@ -24,11 +23,10 @@ pub struct ReportResponse {
 }
 
 pub struct ErrorReporter {
-    client: Client,
-    server_url: String,
-    last_report_time: Mutex<std::time::Instant>,
-    min_interval: Duration,
-    device_id: String,
+    pub server_url: String,
+    pub last_report_time: Mutex<Instant>,
+    pub min_interval: Duration,
+    pub device_id: String,
 }
 
 impl ErrorReporter {
@@ -36,9 +34,8 @@ impl ErrorReporter {
         let device_id = Self::get_device_id();
 
         Self {
-            client: Client::new(),
             server_url: server_url.to_string(),
-            last_report_time: Mutex::new(std::time::Instant::now() - Duration::from_secs(120)),
+            last_report_time: Mutex::new(Instant::now() - Duration::from_secs(120)),
             min_interval: Duration::from_secs(60),
             device_id,
         }
@@ -67,59 +64,5 @@ impl ErrorReporter {
 
     pub fn update_server_url(&mut self, url: &str) {
         self.server_url = url.to_string();
-    }
-
-    pub async fn report_error(
-        &self,
-        error_type: &str,
-        error_message: &str,
-        stack_trace: Option<&str>,
-        context: Option<serde_json::Value>,
-        request_id: Option<&str>,
-    ) -> Result<ReportResponse, String> {
-        {
-            let mut last_time = match self.last_report_time.lock() {
-                Ok(l) => l,
-                Err(e) => return Err(format!("Lock error: {}", e)),
-            };
-            if last_time.elapsed() < self.min_interval {
-                return Err("Rate limited (max 1 report per minute)".to_string());
-            }
-            *last_time = std::time::Instant::now();
-        }
-
-        let report = ErrorReport {
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
-            os_version: std::env::consts::OS.to_string(),
-            error_type: error_type.to_string(),
-            error_message: error_message.to_string(),
-            stack_trace: stack_trace.map(|s| s.to_string()),
-            timestamp: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            device_id: self.device_id.clone(),
-            request_id: request_id.map(|s| s.to_string()),
-            context,
-        };
-
-        let response = self.client
-            .post(format!("{}/api/companion/error", self.server_url))
-            .json(&report)
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await
-            .map_err(|e| format!("Kunne ikke sende fejlrapport til server: {}", e))?;
-
-        if !response.status().is_success() {
-            return Err(format!("Server svarede med status: {}", response.status()));
-        }
-
-        let data: ReportResponse = response
-            .json()
-            .await
-            .map_err(|e| format!("Kunne ikke parse serversvar: {}", e))?;
-
-        Ok(data)
     }
 }
