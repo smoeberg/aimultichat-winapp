@@ -14,6 +14,8 @@ use tauri::{
     tray::{MouseButton, TrayIconBuilder},
     Manager,
 };
+// FIX 1: Import GlobalShortcutExt
+use tauri_plugin_global_shortcut::GlobalShortcutExt;
 
 pub struct AppState {
     pub reporter: Mutex<ErrorReporter>,
@@ -33,26 +35,14 @@ fn set_server_url(state: tauri::State<AppState>, url: String) -> Result<(), Stri
 }
 
 #[command]
-async fn report_error(
-    state: tauri::State<'_, AppState>,
+fn report_error(
+    state: tauri::State<AppState>,
     error_type: String,
     error_message: String,
     context: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
-    // Hent URL uden at holde låsen over await
-    let server_url = {
-        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-        reporter.get_server_url()
-    };
-
-    let result = ErrorReporter::report_error_static(
-        &server_url,
-        &error_type,
-        &error_message,
-        None,
-        context,
-    )
-    .await;
+    let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+    let result = reporter.report_error(&error_type, &error_message, None, context, None);
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -64,8 +54,8 @@ async fn report_error(
 }
 
 #[command]
-async fn submit_user_report(
-    state: tauri::State<'_, AppState>,
+fn submit_user_report(
+    state: tauri::State<AppState>,
     description: String,
     include_logs: bool,
 ) -> Result<serde_json::Value, String> {
@@ -82,19 +72,14 @@ async fn submit_user_report(
         "logs_snippet": logs_content,
     });
 
-    let server_url = {
-        let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
-        reporter.get_server_url()
-    };
-
-    let result = ErrorReporter::report_error_static(
-        &server_url,
+    let reporter = state.reporter.lock().map_err(|e| e.to_string())?;
+    let result = reporter.report_error(
         "user_report",
         "Bruger har indsendt en fejlrapport",
         None,
         Some(context),
-    )
-    .await;
+        None,
+    );
 
     match result {
         Ok(response) => Ok(serde_json::json!({
@@ -164,7 +149,8 @@ pub fn run() {
                 use tauri_plugin_global_shortcut::{Code, Modifiers, Shortcut};
                 let shortcut =
                     Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyE);
-                if let Err(e) = app.global_shortcut().register(shortcut) {
+                // FIX: Brug app.handle() i stedet for app direkte
+                if let Err(e) = app.handle().global_shortcut().register(shortcut) {
                     eprintln!("Advarsel: Kunne ikke registrere global genvej Ctrl+Shift+E: {e}");
                 }
             }
@@ -193,10 +179,17 @@ pub fn run() {
                     }
                     _ => {}
                 })
+                // FIX 2: Brug pattern matching i stedet for event.button
                 .on_tray_icon_event(|tray, event| {
-                    if event.button == MouseButton::Left {
-                        let app_handle = tray.app_handle();
-                        toggle_main_window(&app_handle);
+                    match event {
+                        tauri::tray::TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            ..
+                        } => {
+                            let app_handle = tray.app_handle();
+                            toggle_main_window(&app_handle);
+                        }
+                        _ => {}
                     }
                 })
                 .build(app)?;

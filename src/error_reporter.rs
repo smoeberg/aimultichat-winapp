@@ -66,78 +66,28 @@ impl ErrorReporter {
         self.server_url = url.to_string();
     }
 
-    pub async fn report_error(
+    pub fn get_server_url(&self) -> String {
+        self.server_url.clone()
+    }
+
+    pub fn report_error(
         &self,
         error_type: &str,
         error_message: &str,
-        stack_trace: Option<String>,
+        stack_trace: Option<&str>,
         context: Option<serde_json::Value>,
         request_id: Option<String>,
     ) -> Result<ReportResponse, String> {
         // Check rate limit
         {
-            let mut last_time = self.last_report_time.lock().map_err(|e| e.to_string())?;
-            if last_time.elapsed() < self.min_interval {
-                return Err("Rate limited (max 1 report per minute)".to_string());
-            }
-            *last_time = Instant::now();
-        }
-
-        let report = ErrorReport {
-            app_version: env!("CARGO_PKG_VERSION").to_string(),
-            os_version: std::env::consts::OS.to_string(),
-            error_type: error_type.to_string(),
-            error_message: error_message.to_string(),
-            stack_trace,
-            timestamp: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_secs(),
-            device_id: self.device_id.clone(),
-            request_id,
-            context,
-        };
-
-        let client = reqwest::Client::new();
-        let response_result = client
-            .post(format!("{}/api/companion/error", self.server_url))
-            .json(&report)
-            .timeout(Duration::from_secs(5))
-            .send()
-            .await;
-
-        match response_result {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    match resp.json::<ReportResponse>().await {
-                        Ok(data) => Ok(data),
-                        Err(_) => Ok(ReportResponse {
-                            id: "unknown".to_string(),
-                            acknowledged: true,
-                        }),
-                    }
-                } else {
-                    Err(format!("Server svarede med status: {}", resp.status()))
+            if let Ok(mut last_time) = self.last_report_time.lock() {
+                if last_time.elapsed() < self.min_interval {
+                    return Err("Rate limited (max 1 report per minute)".to_string());
                 }
+                *last_time = Instant::now();
             }
-            Err(e) => Err(format!("Kunne ikke sende fejlrapport: {}", e)),
         }
-    }
-}
 
-impl ErrorReporter {
-    pub fn get_server_url(&self) -> String {
-        self.server_url.clone()
-    }
-
-    pub async fn report_error_static(
-        server_url: &str,
-        error_type: &str,
-        error_message: &str,
-        stack_trace: Option<&str>,
-        context: Option<serde_json::Value>,
-    ) -> Result<ReportResponse, String> {
-        let client = reqwest::Client::new();
         let report = ErrorReport {
             app_version: env!("CARGO_PKG_VERSION").to_string(),
             os_version: std::env::consts::OS.to_string(),
@@ -148,17 +98,17 @@ impl ErrorReporter {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default()
                 .as_secs(),
-            device_id: Self::get_device_id(),
-            request_id: None,
+            device_id: self.device_id,
+            request_id,
             context,
         };
 
+        let client = reqwest::blocking::Client::new();
         let response = client
-            .post(format!("{}/api/companion/error", server_url))
+            .post(format!("{}/api/companion/error", self.server_url))
             .json(&report)
-            .timeout(std::time::Duration::from_secs(5))
+            .timeout(Duration::from_secs(5))
             .send()
-            .await
             .map_err(|e| format!("Failed to send report: {}", e))?;
 
         if !response.status().is_success() {
@@ -167,7 +117,6 @@ impl ErrorReporter {
 
         let data: ReportResponse = response
             .json()
-            .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         Ok(data)
