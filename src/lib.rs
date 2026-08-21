@@ -1,6 +1,12 @@
 mod config;
+mod logger;
+mod error_reporter;
 
 use config::AppConfig;
+use logger::Logger;
+use error_reporter::ErrorReporter;
+
+use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::TrayIconBuilder,
@@ -8,6 +14,11 @@ use tauri::{
     command,
     WindowEvent,
 };
+
+pub struct AppState {
+    pub logger: Mutex<Logger>,
+    pub reporter: Mutex<ErrorReporter>,
+}
 
 #[command]
 fn get_server_url() -> String {
@@ -17,16 +28,117 @@ fn get_server_url() -> String {
 
 #[cfg(debug_assertions)]
 #[command]
-fn set_server_url(url: String) -> Result<(), String> {
+fn set_server_url(url: String, state: tauri::State<'_, AppState>) -> Result<(), String> {
     let mut config = AppConfig::load();
-    config.server_url = url;
+    config.server_url = url.clone();
     config.save()?;
+
+    if let Ok(mut reporter) = state.reporter.lock() {
+        reporter.update_server_url(&url);
+    }
     Ok(())
 }
 
 #[command]
 fn get_app_version() -> String {
     env!("CARGO_PKG_VERSION").into()
+}
+
+#[command]
+async fn report_error_cmd(
+    state: tauri::State<'_, AppState>,
+    error_type: String,
+    error_message: String,
+    context: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let mut reporter = match state.reporter.lock() {
+        Ok(r) => r,
+        Err(_) => return Err("Kunne ikke få adgang til error reporter state".into()),
+    };
+
+    let result = reporter
+        .report_error(
+            &error_type,
+            &error_message,
+            None,
+            context,
+            None,
+        )
+        .await;
+
+    match result {
+        Ok(response) => Ok(serde_json::json!({
+            "success": true,
+            "report_id": response.id,
+        })),
+        Err(e) => {
+            if let Ok(mut logger) = state.logger.lock() {
+                logger.log("error", "error_reporter", &e, None);
+            }
+            Err(e)
+        }
+    }
+}
+
+#[command]
+fn get_logs_cmd(state: tauri::State<'_, AppState>) -> Result<String, String> {
+    let logger = match state.logger.lock() {
+        Ok(l) => l,
+        Err(_) => return Err("Kunne ikke få adgang til logger state".into()),
+    };
+    Ok(logger.get_logs(100))
+}
+
+#[command]
+async fn submit_user_report(
+    state: tauri::State<'_, AppState>,
+    description: String,
+    include_logs: bool,
+) -> Result<serde_json::Value, String> {
+    let logs_content = if include_logs {
+        if let Ok(logger) = state.logger.lock() {
+            Some(logger.get_logs(50))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    let context = serde_json::json!({
+        "user_description": description,
+        "logs_included": include_logs,
+        "logs_snippet": logs_content,
+    });
+
+    let mut reporter = match state.reporter.lock() {
+        Ok(r) => r,
+        Err(_) => return Err("Kunne ikke få adgang til error reporter state".into()),
+    };
+
+    let result = reporter
+        .report_error(
+            "user_report",
+            "Bruger har indsendt en fejlrapport",
+            None,
+            Some(context),
+            None,
+        )
+        .await;
+
+    match result {
+        Ok(response) => Ok(serde_json::json!({
+            "success": true,
+            "report_id": response.id,
+            "message": "Tak for din fejlrapport. Den er sendt til support.",
+        })),
+        Err(e) => {
+            if let Ok(mut logger) = state.logger.lock() {
+                logger.log("error", "user_report", &e, None);
+            }
+            Err(e)
+        }
+    }
 }
 
 fn toggle_main_window(app: &tauri::AppHandle) {
@@ -62,7 +174,17 @@ fn toggle_main_window(app: &tauri::AppHandle) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let initial_config = AppConfig::load();
+    let logger = Logger::new();
+    let reporter = ErrorReporter::new(&initial_config.server_url);
+
+    let app_state = AppState {
+        logger: Mutex::new(logger),
+        reporter: Mutex::new(reporter),
+    };
+
     let builder = tauri::Builder::default()
+        .manage(app_state)
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
@@ -86,13 +208,19 @@ pub fn run() {
     let builder = builder.invoke_handler(tauri::generate_handler![
         get_server_url,
         set_server_url,
-        get_app_version
+        get_app_version,
+        report_error_cmd,
+        get_logs_cmd,
+        submit_user_report
     ]);
 
     #[cfg(not(debug_assertions))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         get_server_url,
-        get_app_version
+        get_app_version,
+        report_error_cmd,
+        get_logs_cmd,
+        submit_user_report
     ]);
 
     builder
