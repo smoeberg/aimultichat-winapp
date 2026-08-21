@@ -1,5 +1,9 @@
 name: Build Eira Companion WinApp
 
+permissions:
+  contents: write
+
+
 on:
   push:
     branches: [ "main" ]
